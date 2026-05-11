@@ -174,6 +174,13 @@ impl SttEngine {
         text_parts.push_str(&format!(
             "--{boundary}\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\njson\r\n"
         ));
+        // Explicitly send an empty initial-prompt so whisper-server cannot
+        // condition the decoder on any prior context. Defensive — current
+        // whisper.cpp server keeps state per-request anyway, but this future-
+        // proofs us against any version that might cache the last prompt.
+        text_parts.push_str(&format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\n\r\n"
+        ));
 
         let file_part = format!(
             "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\nContent-Type: audio/wav\r\n\r\n"
@@ -396,14 +403,22 @@ impl SttEngine {
     }
 }
 
-/// Flush the mic buffer by recording and discarding a short burst.
-/// Prevents TTS playback residue from appearing in the next recording.
+/// Drain stale samples from the ALSA capture queue before a real recording.
+/// Without this, between-cycle residue (kernel DMA carry-over from the prior
+/// arecord, plus a few hundred ms of acoustic echo from TTS playback bleeding
+/// speaker→room→mic) lands in the next capture and biases whisper toward
+/// assistant-stock hallucinations like "I'm here to help".
+///
+/// 1 second of throwaway capture is enough to settle the I2S DMA on Jetson +
+/// LyraT V4.3. The arecord open/close also fully releases and re-acquires the
+/// device, resetting any kernel-side state.
 async fn flush_mic_buffer(device: &str, sample_rate: u32) {
     let flush_path = format!("/tmp/geniepod-flush-{}.wav", std::process::id());
     let _ = Command::new("arecord")
         .args([
             "-D",
             device,
+            "-q",
             "-f",
             "S16_LE",
             "-r",
@@ -411,7 +426,7 @@ async fn flush_mic_buffer(device: &str, sample_rate: u32) {
             "-c",
             "1",
             "-d",
-            "2",
+            "1",
             &flush_path,
         ])
         .output()
@@ -423,6 +438,12 @@ async fn flush_mic_buffer(device: &str, sample_rate: u32) {
 ///
 /// Returns the path to the recorded WAV file.
 pub async fn record_audio(device: &str, sample_rate: u32, duration_secs: u32) -> Result<String> {
+    // Drain any stale samples in the ALSA capture buffer before the real
+    // recording (TTS residue bleeding speaker→room→mic, plus DMA carry-over
+    // from prior cycles). This makes consecutive voice-loop cycles produce
+    // independent captures instead of one polluting the next.
+    flush_mic_buffer(device, sample_rate).await;
+
     let wav_path = format!("/tmp/geniepod-rec-{}.wav", std::process::id());
 
     tracing::info!(
@@ -497,6 +518,11 @@ pub async fn record_audio(device: &str, sample_rate: u32, duration_secs: u32) ->
                     .map(|m| m.len() > 44)
                     .unwrap_or(false) =>
         {
+            // Keep a fixed-path copy of the last capture so an operator can
+            // `aplay /tmp/geniepod-last-rec.wav` to verify what was actually
+            // recorded after a suspicious transcript. Best-effort — failures
+            // here are non-fatal.
+            let _ = tokio::fs::copy(&normalized_path, "/tmp/geniepod-last-rec.wav").await;
             let _ = tokio::fs::remove_file(&wav_path).await;
             tracing::info!(
                 path = %normalized_path,

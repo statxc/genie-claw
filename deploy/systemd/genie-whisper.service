@@ -17,7 +17,7 @@ ExecStart=/opt/geniepod/bin/whisper-server \
     --suppress-nst \
     --no-speech-thold 0.8
 
-Environment=GENIEPOD_WHISPER_MODEL=/opt/geniepod/models/ggml-tiny.bin
+Environment=GENIEPOD_WHISPER_MODEL=/opt/geniepod/models/ggml-small.bin
 Restart=on-failure
 RestartSec=5
 TimeoutStartSec=120

@@ -384,6 +384,68 @@ reports each of the 10 amixer `cset` lines and exits with status 0. See
 [`doc/lyrat-jetson-audio.md`](doc/lyrat-jetson-audio.md) for the full LyraT
 audio frontend setup.
 
+## Alpha.7 Verified Voice Cycle (2026-05-13)
+
+After the alpha.7 PRs landed —
+[#13](https://github.com/GeniePod/genie-claw/pull/13) (DeepFilterNet capture
+denoise), [#16](https://github.com/GeniePod/genie-claw/pull/16) (half-duplex
+post-TTS gate), [#18](https://github.com/GeniePod/genie-claw/pull/18)
+(`genie-whisper-warmup.service`), and
+[#20](https://github.com/GeniePod/genie-claw/pull/20) (first-reply latency
+banner) — a fresh push-to-talk run on the same Jetson Orin Nano + LyraT V4.3
+hardware reports the following first-cycle behavior:
+
+```
+aihpc@ubuntu:~$ sudo -E /opt/geniepod/bin/genie-core
+[voice] Capture device: plughw:APE,0  |  Playback device: plughw:0,0
+INFO STT using long-running whisper-server (model stays loaded in GPU) port=8178 model=/opt/geniepod/models/ggml-small.bin
+[voice] LLM server connected
+
+=== GeniePod Voice Mode (Push-to-Talk) ===
+Press Enter to speak (3 sec), 'quit' to exit.
+
+[voice] Press Enter to speak >
+[voice] Recording 3 seconds — speak now!
+INFO recording complete path=/tmp/geniepod-rec-23998.wav size_bytes=288044
+INFO preprocessed audio with DeepFilterNet chain (bandpass, deep-filter denoise, peak-normalize -3 dBFS) dfn_ms=808 atten_lim_db=100.0
+[voice] Transcribing...
+[voice] You said: "Hello, this is Christine." (STT: 285 ms)
+[voice] Thinking...
+[voice] Tool: memory_recall → Your name is Jared
+[voice] Speaking...
+INFO Piper generated audio, playing... pcm_bytes=216808
+[voice] GeniePod: Understood, Christine is Jared. How can I assist you further? (LLM+TTS: 1018 ms)
+
+=== first voice reply latency ===
+  speech end -> STT done:      285 ms
+  STT done   -> first audio:   3679 ms
+  total (first reply):         3964 ms
+=================================
+
+[voice] Total cycle: 15395 ms
+```
+
+What this confirms:
+
+- **DFN denoise** runs in ~808 ms per 3 s capture (`dfn_ms=808`); whisper
+  receives clean audio.
+- **Half-duplex gate** keeps Piper's previous response out of the next
+  capture — STT correctly transcribes "Hello, this is Christine." instead
+  of bleeding the assistant's voice.
+- **Whisper warmup** has the model resident in iGPU: STT 285 ms warm,
+  vs the 60-90 s cold path before #18.
+- **Memory recall** tool fires and surfaces "Your name is Jared" from
+  the durable namespace tree.
+- **First-reply banner** prints a one-shot 3-line summary on the first
+  successful cycle, then stops. (Latest `main` further decomposes the
+  `STT done -> first audio` line into LLM-until-first-sentence and
+  TTS-first-synth phases for diagnostic clarity — see
+  [#20](https://github.com/GeniePod/genie-claw/pull/20).)
+
+Total first-reply latency of **~4 seconds** from end-of-user-speech to
+first audible TTS audio, on a 7.6 GB Orin Nano running Phi-4-mini Q4_K_M
+LLM + whisper-small + Piper en_US-amy concurrently.
+
 ## License
 
 GNU Affero General Public License v3.0

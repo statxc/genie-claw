@@ -1,5 +1,7 @@
 # GenieClaw
 
+[![CI](https://github.com/GeniePod/genie-claw/actions/workflows/ci.yml/badge.svg)](https://github.com/GeniePod/genie-claw/actions/workflows/ci.yml)
+
 **A private, always-on AI for your home. Runs entirely on a Jetson Orin Nano.
 Voice in, voice out, controls Home Assistant, no cloud.**
 

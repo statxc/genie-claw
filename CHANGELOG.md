@@ -4,6 +4,14 @@
 
 ### Added
 
+- `.github/workflows/ci.yml` — the fmt + clippy + test daily loop for
+  issue #34. Runs `cargo fmt --all -- --check`,
+  `cargo clippy --workspace --all-targets --locked -- -D warnings`, and
+  `cargo test --workspace --locked` (unit, integration, and doc tests) on
+  every push to `main` and every pull request. Each job uses
+  `Swatinem/rust-cache` with a per-job shared key so cached runs stay
+  short. Concurrency group cancels superseded runs on the same ref. CI
+  badge added at the top of the README.
 - First-voice-reply latency banner (issue #19). On the first completed voice
   cycle of a `genie-core` run, the loop prints a one-shot 5-phase breakdown
   from end-of-user-speech to first audible audio:

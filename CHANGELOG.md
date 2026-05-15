@@ -4,6 +4,18 @@
 
 ### Added
 
+- `.github/workflows/scripts.yml` and `ruff.toml` — shellcheck + ruff
+  workflow for the stretch slice of issue #34. Discovers all
+  tracked `*.sh` and `*.py` files via `git ls-files`, then runs
+  `shellcheck --severity=warning` and `ruff check
+  --output-format=github`. `ruff.toml` pins `target-version = "py310"`
+  (Jetson Ubuntu 22.04) and ignores E402, with an inline comment
+  explaining why: `deploy/scripts/genie-wake-listen.py` and
+  `genie-wakeword.py` legitimately import after redirecting ALSA stderr
+  to `/dev/null` so the C-level diagnostic noise from PyAudio doesn't
+  leak into the protocol stdout. Trigger paths are scoped to `**.sh` /
+  `**.py` / the workflow file itself so Rust-only changes don't spin up
+  this job.
 - First-voice-reply latency banner (issue #19). On the first completed voice
   cycle of a `genie-core` run, the loop prints a one-shot 5-phase breakdown
   from end-of-user-speech to first audible audio:

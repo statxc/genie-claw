@@ -39,18 +39,18 @@ pub fn first_speak_called_at() -> Option<std::time::Instant> {
 }
 
 fn mark_first_audio() {
-    if let Ok(mut g) = FIRST_AUDIO_AT.lock() {
-        if g.is_none() {
-            *g = Some(std::time::Instant::now());
-        }
+    if let Ok(mut g) = FIRST_AUDIO_AT.lock()
+        && g.is_none()
+    {
+        *g = Some(std::time::Instant::now());
     }
 }
 
 fn mark_first_speak_called() {
-    if let Ok(mut g) = FIRST_SPEAK_CALLED_AT.lock() {
-        if g.is_none() {
-            *g = Some(std::time::Instant::now());
-        }
+    if let Ok(mut g) = FIRST_SPEAK_CALLED_AT.lock()
+        && g.is_none()
+    {
+        *g = Some(std::time::Instant::now());
     }
 }
 

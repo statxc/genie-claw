@@ -98,22 +98,21 @@ pub async fn run(
     // Auto-detect playback device. Uses a separate helper-script invocation
     // with output=1 so it prefers USB audio (headphone/headset) over the
     // capture-only LyraT I2S path.
-    let audio_output_device = if voice_cfg.audio_output_device.is_empty()
-        || voice_cfg.audio_output_device == "auto"
-    {
-        match detect_audio_output_device().await {
-            Some(dev) => {
-                tracing::info!(device = %dev, "auto-detected playback device");
-                dev
+    let audio_output_device =
+        if voice_cfg.audio_output_device.is_empty() || voice_cfg.audio_output_device == "auto" {
+            match detect_audio_output_device().await {
+                Some(dev) => {
+                    tracing::info!(device = %dev, "auto-detected playback device");
+                    dev
+                }
+                None => {
+                    tracing::warn!("no playback device found, falling back to 'default'");
+                    "default".to_string()
+                }
             }
-            None => {
-                tracing::warn!("no playback device found, falling back to 'default'");
-                "default".to_string()
-            }
-        }
-    } else {
-        voice_cfg.audio_output_device.clone()
-    };
+        } else {
+            voice_cfg.audio_output_device.clone()
+        };
 
     eprintln!(
         "[voice] Capture device: {}  |  Playback device: {}",

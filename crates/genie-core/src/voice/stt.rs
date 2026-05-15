@@ -22,10 +22,10 @@ pub fn audio_captured_at() -> Option<std::time::Instant> {
 }
 
 fn mark_audio_captured() {
-    if let Ok(mut g) = AUDIO_CAPTURED_AT.lock() {
-        if g.is_none() {
-            *g = Some(std::time::Instant::now());
-        }
+    if let Ok(mut g) = AUDIO_CAPTURED_AT.lock()
+        && g.is_none()
+    {
+        *g = Some(std::time::Instant::now());
     }
 }
 
@@ -213,8 +213,7 @@ impl SttEngine {
         );
         let body_end = format!("\r\n--{boundary}--\r\n");
 
-        let content_length =
-            text_parts.len() + file_part.len() + wav_data.len() + body_end.len();
+        let content_length = text_parts.len() + file_part.len() + wav_data.len() + body_end.len();
 
         let stream = tokio::net::TcpStream::connect(&addr).await?;
         let (reader, mut writer) = stream.into_split();
@@ -469,10 +468,10 @@ pub async fn flush_mic_buffer(device: &str, sample_rate: u32) {
 /// Variants in increasing strength / latency:
 /// - `None`        — bandpass + peak-normalize only (debug / no-denoise A/B)
 /// - `Sox`         — sox `noisered` spectral subtraction against a per-host
-///                   noise profile (alpha.6 baseline, see PR #11)
+///   noise profile (alpha.6 baseline, see PR #11)
 /// - `DeepFilterNet` — neural denoiser via the `deep-filter` subprocess
-///                   (alpha.7, see issue #12). Handles non-stationary noise
-///                   without a noise profile.
+///   (alpha.7, see issue #12). Handles non-stationary noise
+///   without a noise profile.
 #[derive(Debug, Clone)]
 pub enum Denoiser {
     None,
@@ -487,11 +486,7 @@ pub enum Denoiser {
 
 impl Denoiser {
     /// Build from VoiceConfig strings. Unknown values default to `None`.
-    pub fn from_config(
-        kind: &str,
-        deep_filter_path: &str,
-        deep_filter_atten_lim_db: f32,
-    ) -> Self {
+    pub fn from_config(kind: &str, deep_filter_path: &str, deep_filter_atten_lim_db: f32) -> Self {
         match kind {
             "deepfilternet" | "deep_filter" | "dfn" => Denoiser::DeepFilterNet {
                 binary_path: deep_filter_path.to_string(),
@@ -619,11 +614,14 @@ async fn preprocess_capture(wav_path: &str, denoiser: &Denoiser) -> Result<Strin
         Denoiser::DeepFilterNet {
             binary_path,
             atten_lim_db,
-        } => {
-            run_deepfilternet_chain(wav_path, &normalized_path, binary_path, *atten_lim_db).await
-        }
+        } => run_deepfilternet_chain(wav_path, &normalized_path, binary_path, *atten_lim_db).await,
         Denoiser::Sox { noise_profile_path } => {
-            run_sox_chain(wav_path, &normalized_path, Some(noise_profile_path.as_str())).await
+            run_sox_chain(
+                wav_path,
+                &normalized_path,
+                Some(noise_profile_path.as_str()),
+            )
+            .await
         }
         Denoiser::None => run_sox_chain(wav_path, &normalized_path, None).await,
     }
@@ -658,12 +656,7 @@ async fn run_sox_chain(
     // compand: 20 ms attack / 200 ms release, floor at -50 dBFS, +13 dB lift on
     // quiet speech (-25 -> -12), loud speech (-5) held to avoid clip, -2 dB
     // makeup offset.
-    sox_cmd.args([
-        "compand",
-        "0.02,0.20",
-        "-50,-50,-25,-12,-5,-5",
-        "-2",
-    ]);
+    sox_cmd.args(["compand", "0.02,0.20", "-50,-50,-25,-12,-5,-5", "-2"]);
     sox_cmd.args(["gain", "-n", "-3"]);
 
     match sox_cmd.output().await {
@@ -756,7 +749,10 @@ async fn run_deepfilternet_chain(
     if !stage1_ok {
         if let Ok(o) = stage1 {
             tracing::warn!(
-                stderr = String::from_utf8_lossy(&o.stderr).lines().next().unwrap_or(""),
+                stderr = String::from_utf8_lossy(&o.stderr)
+                    .lines()
+                    .next()
+                    .unwrap_or(""),
                 "sox stage 1 (downmix+bandpass) failed; falling back to sox chain"
             );
         }
@@ -783,7 +779,10 @@ async fn run_deepfilternet_chain(
     if !dfn_ok {
         if let Ok(o) = dfn_res {
             tracing::warn!(
-                stderr = String::from_utf8_lossy(&o.stderr).lines().next().unwrap_or(""),
+                stderr = String::from_utf8_lossy(&o.stderr)
+                    .lines()
+                    .next()
+                    .unwrap_or(""),
                 "deep-filter run failed; falling back to sox chain"
             );
         } else if let Err(ref e) = dfn_res {
@@ -812,7 +811,10 @@ async fn run_deepfilternet_chain(
     if !stage3_ok {
         if let Ok(o) = stage3 {
             tracing::warn!(
-                stderr = String::from_utf8_lossy(&o.stderr).lines().next().unwrap_or(""),
+                stderr = String::from_utf8_lossy(&o.stderr)
+                    .lines()
+                    .next()
+                    .unwrap_or(""),
                 "sox stage 3 (peak-normalize) failed; falling back to sox chain"
             );
         }

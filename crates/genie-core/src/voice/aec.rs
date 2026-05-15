@@ -338,6 +338,10 @@ mod tests {
         assert!(!has_ref, "Reference should be cleared");
     }
 
+    // TEST_LOCK serializes tests that touch the global ECHO_REF; the guard is
+    // intentionally held across awaits because it only gates other tests in
+    // this module, never production code.
+    #[allow(clippy::await_holding_lock)]
     #[tokio::test]
     async fn process_aec_skips_stale_reference() {
         let _guard = TEST_LOCK.lock().unwrap();

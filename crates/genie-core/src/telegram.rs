@@ -198,19 +198,12 @@ impl TelegramApi {
         Ok(())
     }
 
-    async fn handle_voice_message(
-        &self,
-        chat_id: i64,
-        voice: &TelegramVoice,
-    ) -> Result<()> {
+    async fn handle_voice_message(&self, chat_id: i64, voice: &TelegramVoice) -> Result<()> {
         let voice_cfg = &self.config.voice;
 
         if !voice_cfg.enabled {
             let _ = self
-                .send_text(
-                    chat_id,
-                    "Voice messages aren't enabled on this deployment.",
-                )
+                .send_text(chat_id, "Voice messages aren't enabled on this deployment.")
                 .await;
             return Ok(());
         }
@@ -268,10 +261,7 @@ impl TelegramApi {
             Err(e) => {
                 tracing::warn!(error = %e, "telegram voice transcription failed");
                 let _ = self
-                    .send_text(
-                        chat_id,
-                        "Sorry, I couldn't transcribe that voice message.",
-                    )
+                    .send_text(chat_id, "Sorry, I couldn't transcribe that voice message.")
                     .await;
                 return Ok(());
             }
@@ -779,7 +769,10 @@ mod tests {
         assert_eq!(clean_transcript("[BLANK_AUDIO]"), "");
         assert_eq!(clean_transcript(" Thank you. "), "");
         assert_eq!(clean_transcript("(silence)"), "");
-        assert_eq!(clean_transcript("turn off the lights"), "turn off the lights");
+        assert_eq!(
+            clean_transcript("turn off the lights"),
+            "turn off the lights"
+        );
     }
 
     #[test]

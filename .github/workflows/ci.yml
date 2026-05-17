@@ -1,0 +1,66 @@
+# Daily fmt + clippy + test loop for issue #34.
+# Runs on every push to main and every PR targeting main.
+# Pairs with the audit.yml workflow that consumes the rustls-webpki
+# 0.103.13 bump landed alongside this file (RUSTSEC-2026-0104).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  # Treat warnings as errors so clippy/rustc drift fails CI instead of rotting.
+  RUSTFLAGS: -D warnings
+  RUST_BACKTRACE: 1
+
+# Cancel in-flight runs when a newer commit lands on the same ref,
+# so force-pushes during review don't queue up redundant builds.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fmt:
+    name: cargo fmt
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    name: cargo clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-clippy
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  test:
+    name: cargo test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-test
+      - name: cargo build --workspace
+        run: cargo build --workspace --locked --all-targets
+      - name: cargo test --workspace
+        run: cargo test --workspace --locked --all-targets
+      - name: cargo test --doc
+        run: cargo test --workspace --locked --doc

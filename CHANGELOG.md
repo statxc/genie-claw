@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Crash fix: non-ASCII backend error bodies** (#147): `truncate_body`
+  in `llm/openai_compat.rs` sliced the response body at a fixed 240-byte
+  offset (`&trimmed[..240]`). When that offset landed inside a multi-byte
+  UTF-8 character — common for localized HTML error pages or malformed
+  JSON — the slice panicked, and because release builds use
+  `panic = "abort"` it took down the whole `genie-core` daemon (health
+  checks and voice service) rather than failing the single request. The
+  truncation now walks back to a char boundary via the existing
+  `truncate_utf8` helper, so a malformed response surfaces as an ordinary
+  error string.
 - **Real streaming TTS** (#26): the voice loop now detects sentence
   boundaries inside the LLM streaming callback and forwards completed
   sentences to a concurrent TTS task immediately, instead of waiting

@@ -348,6 +348,11 @@ async fn run_with_wakeword(
                     if let Ok(transcript) = stt_engine.transcribe_file(&followup_path).await {
                         let text = transcript.text.trim().to_string();
                         if !text.is_empty() {
+                            // Security: scan for prompt injection (issue #196).
+                            crate::security::injection::scan_and_warn(
+                                &text,
+                                crate::security::injection::source::VOICE_FOLLOWUP,
+                            );
                             let response_language = transcript.language.clone().or_else(|| {
                                 crate::voice::language::detect_language_from_text(&text)
                             });
@@ -1000,6 +1005,8 @@ pub async fn process_transcript(
         eprintln!("[voice] No speech detected.");
         return true;
     }
+    // Security: scan for prompt injection (issue #196).
+    crate::security::injection::scan_and_warn(&text, crate::security::injection::source::VOICE);
     if let VoiceIntentDecision::Reject(reason) = intent::assess_transcript(&text) {
         if let Some(path) = wav_path {
             let _ = tokio::fs::remove_file(path).await;

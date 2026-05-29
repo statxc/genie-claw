@@ -37,6 +37,7 @@ first.
   `nvext.agent_hints`, and system-prompt prefix cache metadata for KV reuse
 - system-prompt SHA exposed in boot logs, `/api/health`, and `genie-ctl status`
   to prove deterministic prompt assembly across restarts
+- BFCL-style local tool-call scoring through `genie-ctl bfcl-score`
 - Jetson aarch64 cross-compile CI
 
 Current workspace version: `v1.0.0-alpha.9`.
@@ -46,7 +47,7 @@ Current workspace version: `v1.0.0-alpha.9`.
 - keep the agent fast and reliable inside a 4096-token Jetson context
 - tune the AI harness around high-signal home context, family memory, and typed tools
 - improve accuracy through deterministic device state and memory retrieval, not larger prompts
-- add BFCL-based scoring for tool-call accuracy and regressions
+- expand BFCL-based scoring for tool-call accuracy and regressions
 - validate hardware-facing and performance-sensitive changes on Jetson Orin Nano 8GB whenever possible
 - reject broad changes that make the agent less native, slower, less deterministic, or harder to test
 
@@ -76,10 +77,10 @@ gap directly and keep the change small enough to review and reproduce.
 
 ## Immediate Engineering Plan
 
-1. Add BFCL scoring for tool-call accuracy.
-2. Build deterministic fixtures for home state, family memory, and typed tools.
-3. Score expected tool names and arguments, not just natural-language answers.
-4. Track regressions in CI and keep a Jetson Orin Nano 8GB validation path for
+1. Expand BFCL fixtures for home state, family memory, and typed tools.
+2. Score expected tool names and arguments, not just natural-language answers.
+3. Add the BFCL score to CI as a required regression signal.
+4. Keep a Jetson Orin Nano 8GB validation path for
    latency, memory pressure, and native runtime behavior.
 5. Use the scores to improve routing, memory retrieval, and typed-tool accuracy
    before expanding prompts or adding broader features.
@@ -119,7 +120,7 @@ For Jetson setup, deployment, and Home Assistant wiring, use
 |-------|---------|
 | `genie-core` | Main agent runtime: prompt building, tools, memory, HTTP API, and channel/session adapters |
 | `genie-common` | Shared config, mode types, and tegrastats parsing |
-| `genie-ctl` | Local CLI for chat, status, tools, health, and diagnostics |
+| `genie-ctl` | Local CLI for chat, status, tools, BFCL scoring, health, and diagnostics |
 | `genie-governor` | Resource governor and service lifecycle controller |
 | `genie-health` | Local health polling and alert forwarding |
 | `genie-api` | Lightweight local dashboard |

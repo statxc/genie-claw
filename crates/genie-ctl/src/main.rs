@@ -8,6 +8,8 @@
 //!                              Search the web through genie-core
 //!   genie-ctl history         Show conversation history
 //!   genie-ctl tools           List available tools
+//!   genie-ctl bfcl-score --cases CASES.jsonl --predictions PREDS.jsonl [--json]
+//!                              Score tool-call accuracy from JSONL fixtures
 //!   genie-ctl skill ...       Manage loadable skill modules
 //!   genie-ctl speaker ...     Manage local speaker identity profiles
 //!   genie-ctl health          Check service health
@@ -127,6 +129,10 @@ async fn main() -> Result<()> {
         }
         "history" => cmd_history().await?,
         "tools" => cmd_tools().await?,
+        "bfcl-score" | "eval-bfcl" => {
+            let score_args = parse_bfcl_score_args(&args[2..])?;
+            cmd_bfcl_score(&score_args)?;
+        }
         "connectivity" | "radio" => cmd_connectivity().await?,
         "skill" | "skills" => {
             if args.len() < 3 {
@@ -200,6 +206,8 @@ COMMANDS:
                         Search the web through genie-core
     history             Show conversation history
     tools               List available tools
+    bfcl-score --cases C --predictions P [--json]
+                        Score tool-call accuracy from JSONL fixtures
     connectivity        Inspect ESP32-C6 Thread/Matter sidecar status
     skill <SUBCOMMAND>  Manage loadable skill modules
 {speaker}\
@@ -915,6 +923,13 @@ struct SearchArgs {
     query: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BfclScoreArgs {
+    cases: PathBuf,
+    predictions: PathBuf,
+    json: bool,
+}
+
 fn parse_search_args(args: &[String]) -> Result<SearchArgs> {
     let mut fresh = false;
     let mut limit = 3;
@@ -953,6 +968,67 @@ fn parse_search_args(args: &[String]) -> Result<SearchArgs> {
     })
 }
 
+fn parse_bfcl_score_args(args: &[String]) -> Result<BfclScoreArgs> {
+    let mut cases = None;
+    let mut predictions = None;
+    let mut json = false;
+    let mut idx = 0;
+
+    while idx < args.len() {
+        let arg = &args[idx];
+        match arg.as_str() {
+            "--cases" => {
+                let Some(value) = args.get(idx + 1) else {
+                    anyhow::bail!("--cases requires a JSONL path");
+                };
+                cases = Some(PathBuf::from(value));
+                idx += 2;
+            }
+            "--predictions" | "--preds" => {
+                let Some(value) = args.get(idx + 1) else {
+                    anyhow::bail!("--predictions requires a JSONL path");
+                };
+                predictions = Some(PathBuf::from(value));
+                idx += 2;
+            }
+            "--json" => {
+                json = true;
+                idx += 1;
+            }
+            _ if arg.starts_with("--cases=") => {
+                cases = Some(PathBuf::from(arg.trim_start_matches("--cases=")));
+                idx += 1;
+            }
+            _ if arg.starts_with("--predictions=") => {
+                predictions = Some(PathBuf::from(arg.trim_start_matches("--predictions=")));
+                idx += 1;
+            }
+            _ if arg.starts_with("--preds=") => {
+                predictions = Some(PathBuf::from(arg.trim_start_matches("--preds=")));
+                idx += 1;
+            }
+            other => anyhow::bail!("unknown bfcl-score option: {}", other),
+        }
+    }
+
+    let Some(cases) = cases else {
+        anyhow::bail!(
+            "Usage: genie-ctl bfcl-score --cases CASES.jsonl --predictions PREDICTIONS.jsonl [--json]"
+        );
+    };
+    let Some(predictions) = predictions else {
+        anyhow::bail!(
+            "Usage: genie-ctl bfcl-score --cases CASES.jsonl --predictions PREDICTIONS.jsonl [--json]"
+        );
+    };
+
+    Ok(BfclScoreArgs {
+        cases,
+        predictions,
+        json,
+    })
+}
+
 fn parse_search_limit(value: &str) -> Result<u64> {
     let limit = value
         .parse::<u64>()
@@ -985,6 +1061,63 @@ async fn cmd_search(query: &str, fresh: bool, limit: u64) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn cmd_bfcl_score(args: &BfclScoreArgs) -> Result<()> {
+    let cases = genie_core::eval::bfcl::load_cases_jsonl(&args.cases)?;
+    let predictions = genie_core::eval::bfcl::load_predictions_jsonl(&args.predictions)?;
+    let report = genie_core::eval::bfcl::score_cases(&cases, &predictions);
+
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        return Ok(());
+    }
+
+    println!("BFCL tool-call score");
+    println!("cases:               {}", report.total_cases);
+    println!(
+        "parse_accuracy:      {}",
+        format_score_rate(report.parse_accuracy)
+    );
+    println!(
+        "tool_name_accuracy:  {}",
+        format_score_rate(report.tool_name_accuracy)
+    );
+    println!(
+        "argument_accuracy:   {}",
+        format_score_rate(report.argument_accuracy)
+    );
+    println!(
+        "strict_accuracy:     {}",
+        format_score_rate(report.strict_accuracy)
+    );
+    println!("missing_predictions: {}", report.missing_predictions);
+    println!("failures:            {}", report.failure_count);
+
+    let failures = report
+        .case_scores
+        .iter()
+        .filter(|score| !score.strict_match)
+        .take(10)
+        .collect::<Vec<_>>();
+
+    if !failures.is_empty() {
+        println!("\nFirst failures:");
+        for failure in failures {
+            let detail = if failure.diagnostics.is_empty() {
+                "no diagnostic".to_string()
+            } else {
+                failure.diagnostics.join("; ")
+            };
+            println!("  {}: {}", failure.id, detail);
+        }
+    }
+
+    Ok(())
+}
+
+fn format_score_rate(rate: f64) -> String {
+    format!("{:.2}%", rate * 100.0)
 }
 
 async fn cmd_history() -> Result<()> {
@@ -2106,6 +2239,53 @@ mod tests {
         let args = vec!["--limit".to_string(), "9".to_string(), "Matter".to_string()];
 
         assert!(parse_search_args(&args).is_err());
+    }
+
+    #[test]
+    fn parse_bfcl_score_args_supports_required_paths_and_json() {
+        let args = vec![
+            "--cases".to_string(),
+            "tests/bfcl/home_tool_cases.jsonl".to_string(),
+            "--predictions".to_string(),
+            "tests/bfcl/home_tool_predictions.jsonl".to_string(),
+            "--json".to_string(),
+        ];
+
+        let parsed = parse_bfcl_score_args(&args).unwrap();
+
+        assert_eq!(
+            parsed.cases,
+            PathBuf::from("tests/bfcl/home_tool_cases.jsonl")
+        );
+        assert_eq!(
+            parsed.predictions,
+            PathBuf::from("tests/bfcl/home_tool_predictions.jsonl")
+        );
+        assert!(parsed.json);
+    }
+
+    #[test]
+    fn parse_bfcl_score_args_supports_equals_form() {
+        let args = vec![
+            "--cases=cases.jsonl".to_string(),
+            "--preds=predictions.jsonl".to_string(),
+        ];
+
+        let parsed = parse_bfcl_score_args(&args).unwrap();
+
+        assert_eq!(parsed.cases, PathBuf::from("cases.jsonl"));
+        assert_eq!(parsed.predictions, PathBuf::from("predictions.jsonl"));
+        assert!(!parsed.json);
+    }
+
+    #[test]
+    fn parse_bfcl_score_args_rejects_missing_prediction_path() {
+        let args = vec![
+            "--cases".to_string(),
+            "tests/bfcl/home_tool_cases.jsonl".to_string(),
+        ];
+
+        assert!(parse_bfcl_score_args(&args).is_err());
     }
 
     #[cfg(feature = "voice")]

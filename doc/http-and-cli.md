@@ -386,6 +386,7 @@ Implemented in `crates/genie-ctl/src/main.rs`.
 | `genie-ctl search [--fresh] [--limit N] <QUERY>` | Direct web search |
 | `genie-ctl history` | Show current conversation history |
 | `genie-ctl tools` | List available tools |
+| `genie-ctl bfcl-score --cases C --predictions P [--json]` | Score BFCL-style tool-call fixtures |
 | `genie-ctl connectivity` | Show coprocessor boundary status |
 | `genie-ctl skill ...` | Manage loadable skills |
 | `genie-ctl speaker ...` | Manage local speaker identity profiles |
@@ -395,6 +396,20 @@ Implemented in `crates/genie-ctl/src/main.rs`.
 | `genie-ctl diag` | Diagnostics summary |
 | `genie-ctl support-bundle [PATH]` | Write a JSON diagnostics bundle |
 | `genie-ctl version` | Version output |
+
+### `genie-ctl bfcl-score`
+
+Scores local JSONL fixtures for tool-call accuracy without executing tools:
+
+```bash
+cargo run -p genie-ctl -- bfcl-score \
+  --cases tests/bfcl/home_tool_cases.jsonl \
+  --predictions tests/bfcl/home_tool_predictions.jsonl
+```
+
+The scorer parses raw JSON, fenced JSON, embedded JSON, and OpenAI-compatible
+`tool_calls` wrappers. It reports parse, tool-name, argument, and strict exact
+accuracy. Use `--json` for machine-readable output suitable for CI.
 
 ### `genie-ctl support-bundle`
 
